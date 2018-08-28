@@ -1,22 +1,25 @@
+# -*- coding: utf-8 -*-
+
 import socket
 import queue
 import threading
 import time
+import os
+from dotenv import load_dotenv
 
-PORT = 12345
-HOST = socket.gethostbyname(socket.gethostname())
-
-
+load_dotenv()
 
 class Server:
     def __init__(self):
+        self.host = os.getenv("HOST")
+        self.port = int(os.getenv("PORT"))
+        self.buffer_size = int(os.getenv("BUFFER_SIZE"))
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.bind((HOST, PORT))
+        self.s.bind((self.host, self.port))
         self.s.listen()
         self.event = threading.Event()
 
-
-        self.input_queue = queue.Queue(maxsize=-1)
+        self.input_queue = queue.Queue(maxsize=-1) #número negativo no maxsize para infinito
         self.process_queue = queue.Queue(maxsize=-1)
         self.log_queue = queue.Queue(maxsize=-1)
         self.hash = {}
@@ -24,7 +27,7 @@ class Server:
     def reload_hash(self):
         try:
             with open('logfile', 'r') as file:
-                for line in file:
+                for line in file: #lê o arquivo linha por linha
                     line.replace('\n','')
                     self.process_command(reload=True, data=line)
         except:
@@ -32,9 +35,9 @@ class Server:
 
     def receive_command(self, c, addr):
         while not self.event.is_set():
-            data = c.recv(1024).decode()
+            data = c.recv(self.buffer_size).decode()
             if not data: break
-            self.input_queue.put((c, addr, data))
+            self.input_queue.put((c, addr, data)) #c -> conexão, addr -> endereço, data -> data
         c.close()
 
     def enqueue_command(self):
@@ -44,7 +47,7 @@ class Server:
                 self.process_queue.put((c, data))
                 self.log_queue.put((addr, data))
                 
-    def process_command(self, reload=False, data=""):
+    def process_command(self, reload=False, data=""): #tira de fila de processos e vai processar e responder pro cliente
         while not self.event.is_set():
             if not self.process_queue.empty() or reload == True:
                 if reload == False:
@@ -88,7 +91,10 @@ class Server:
                     response_msg = "Invalid command".encode()
 
                 if reload == False:
-                    c.send(response_msg)
+                    try:
+                        c.send(response_msg)
+                    except:
+                        pass
                 else:
                     break
 
@@ -97,7 +103,7 @@ class Server:
         logfile = open('logfile', 'a')
         while not self.event.is_set():
             if not self.log_queue.empty():
-                _, data = self.log_queue.get()
+                _, data = self.log_queue.get() #data é o que recebeu do usuário, basicamente o comando
                 if data.split()[0] != "READ":
                     logfile.write(data + '\n')
 
@@ -110,7 +116,7 @@ class Server:
                 c, addr = self.s.accept()
                 print("New connection: ", addr)
                 t = threading.Thread(target=self.receive_command, args=(c, addr))
-                t.setDaemon(True)
+                t.setDaemon(True) #quando o programa encerrar a thread também encerra
                 t.start()
             except KeyboardInterrupt:
                 self.event.set()
@@ -122,7 +128,7 @@ class Server:
 
 
     def run(self):
-        self.reload_hash()
+        self.reload_hash() #se tiver alguma coisa no arquivo de log ele reexecuta
 
         enqueue_thread = threading.Thread(target=self.enqueue_command)
         enqueue_thread.setDaemon(True)
