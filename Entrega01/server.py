@@ -98,7 +98,6 @@ class Server:
                 else:
                     break
 
-
     def log_command(self):
         logfile = open('logfile', 'a')
         while not self.event.is_set():
