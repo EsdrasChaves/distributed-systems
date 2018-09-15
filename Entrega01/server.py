@@ -7,7 +7,6 @@ import time
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
 
 class Server:
     def __init__(self):
@@ -27,13 +26,17 @@ class Server:
     def reload_hash(self):
         try:
             with open('logfile', 'r') as file:
+                i = 0
                 for line in file: #lê o arquivo linha por linha
+                    print (i + "\n")
+                    i += 1
                     line.replace('\n','')
                     self.process_command(reload=True, data=line)
         except:
             pass
 
     def receive_command(self, c, addr):
+        print("New connection: ", addr)
         while not self.event.is_set():
             data = c.recv(self.buffer_size).decode()
             if not data: break
@@ -90,7 +93,7 @@ class Server:
                 else:
                     response_msg = "Invalid command".encode()
 
-                if reload == False:
+                if not False:
                     try:
                         c.send(response_msg)
                     except:
@@ -105,6 +108,7 @@ class Server:
                 _, data = self.log_queue.get() #data é o que recebeu do usuário, basicamente o comando
                 if data.split()[0] != "READ":
                     logfile.write(data + '\n')
+                    logfile.flush()
 
         logfile.close()
 
@@ -113,7 +117,6 @@ class Server:
         while True:
             try:
                 c, addr = self.s.accept()
-                print("New connection: ", addr)
                 t = threading.Thread(target=self.receive_command, args=(c, addr))
                 t.setDaemon(True) #quando o programa encerrar a thread também encerra
                 t.start()
@@ -144,5 +147,11 @@ class Server:
         self.program_loop()
 
 
-server = Server()
-server.run()
+def run_server():
+    load_dotenv()
+    server = Server()
+    server.run()
+
+if __name__ == '__main__':
+
+    run_server()
