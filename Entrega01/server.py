@@ -93,7 +93,7 @@ class Server:
                 else:
                     response_msg = "Invalid command".encode()
 
-                if not False:
+                if reload == False:
                     try:
                         c.send(response_msg)
                     except:
