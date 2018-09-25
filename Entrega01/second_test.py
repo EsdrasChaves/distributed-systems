@@ -43,9 +43,6 @@ class ClientTest:
         self.execute("CREATE {}2 ItemI".format(param))
         self.execute("READ {}3".format(param))    # nao existente
         self.execute("UPDATE {}3 ItemJ2".format(param)) # nao existente
-        #4.5        
-        self.execute("CREATE {}3 ItemJ".format(param))       
-        self.execute("READ {}3".format(param))
         self.execute("DELETE {}3".format(param))
 
 
