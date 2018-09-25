@@ -25,23 +25,22 @@ class ClientTest:
     def run(self):
         # CRUD OK
         print("CRUD OK")
-        self.execute("CREATE 1001 ItemI")
-        self.execute("READ 1001")
-        self.execute("UPDATE 1001 ItemI2")
-        self.execute("READ 1001")
-        self.execute("DELETE 1001")
+        self.execute("CREATE 1 ItemI")
+        self.execute("READ 1")
+        self.execute("UPDATE 1 ItemI2")
+        self.execute("READ 1")
+        self.execute("DELETE 1")
         # CRUD NOK
         print("CRUD NOK")
-        self.execute("CREATE 1004 ItemI")   # nao existente
-        self.execute("CREATE 1004 ItemI")
-        self.execute("READ 1050 ItemJ")    # nao existente
-        self.execute("UPDATE 1050 ItemJ2") # nao existente
-        self.execute("READ 1005 ItemJ")
-        self.execute("DELETE 1005 ItemJ")
+        self.execute("CREATE 2 ItemI")   # nao existente
+        self.execute("CREATE 2 ItemI")
+        self.execute("READ 50")    # nao existente
+        self.execute("UPDATE 1050 ItemK") # nao existente
+        self.execute("DELETE 1005")
         # Recuperação do Estado
         print("Recuperação do Estado \n")
         i=0;        
-        startId 1010
+        startId = 1010
         for i in range(5):
             number = startId + i # apenas um offset para evitar conflitos de id
             self.execute2("CREATE "+str(number)+" Item"+str(number))

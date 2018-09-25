@@ -79,9 +79,6 @@ class ClientTest:
         for i in range(inicial + 1,inicial + 1001): # 10001 até 11001 (+1001: range vai até max-1)
             v = int(self.execute2( "READ "+str(i-1) )) + 1
             self.execute2("CREATE "+ str(i) + " " + str(v))
-        print(str(i) + "Itens inseridos \n >READ a1000: ")     
-        self.execute("READ {}".format(inicial + 1000))
-
 
 if __name__ == '__main__':
 
