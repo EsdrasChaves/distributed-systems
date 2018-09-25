@@ -43,6 +43,8 @@ class ClientTest:
         self.execute("CREATE {}2 ItemI".format(param))
         self.execute("READ {}3".format(param))    # nao existente
         self.execute("UPDATE {}3 ItemJ2".format(param)) # nao existente
+        #4.5        
+        self.execute("CREATE {}3 ItemJ".format(param))       
         self.execute("READ {}3".format(param))
         self.execute("DELETE {}3".format(param))
 
@@ -57,27 +59,28 @@ class ClientTest:
         self.s.close()
         
     def parte2(self,param):
-        startId = (1+param)*1000
-        i=0        
+      
 
         # recria o socket e reconecta
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect((self.host, self.port))
-        
-        startId += 5
+
+        startId = ((1+param)*100) + 5
         for i in range(5):
             number = startId + i # apenas um offset para evitar conflitos de id
             self.execute2("CREATE "+str(number)+" Item"+str(number))
         
+        startId = (1+param)*1000
+        i=0
         # Ordem de Execução
         print("Ordem de Execução")
-        inicial = (param + 1)*10000 + 11
-        self.execute("CREATE {} 1".format(inicial)) # o registro a0 é o 0 começa com o valor "1"
-        for i in range(inicial + 1,inicial + 1001): 
+        inicial = (param + 1)*10000
+        self.execute("CREATE {} 1".format(inicial)) # o registro a0 é o 10000 começa com o valor "1"
+        for i in range(inicial + 1,inicial + 1001): # 10001 até 11001 (+1001: range vai até max-1)
             v = int(self.execute2( "READ "+str(i-1) )) + 1
             self.execute2("CREATE "+ str(i) + " " + str(v))
         print(str(i) + "Itens inseridos \n >READ a1000: ")     
-        self.execute("READ {}".format(inicial + 1001))
+        self.execute("READ {}".format(inicial + 1000))
 
 
 if __name__ == '__main__':
@@ -97,7 +100,7 @@ if __name__ == '__main__':
     for i in range(10):
         thread[i].join()
         
-    input('Encerre o Server')
+    input('Reinicie o Server')
     thread = []
     for i in range(10):
         thread.append(Thread(target=clients[i].parte2,args=(i,)))
