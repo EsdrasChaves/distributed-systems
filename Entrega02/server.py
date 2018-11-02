@@ -7,6 +7,7 @@ import time
 import os
 import sys
 from dotenv import load_dotenv
+import configparser
 
 
 class Server:
@@ -18,12 +19,17 @@ class Server:
         self.s.bind((self.host, self.port))
         self.s.listen()
         self.event = threading.Event()
-
         self.input_queue = queue.Queue(maxsize=-1) #número negativo no maxsize para infinito
         self.process_queue = queue.Queue(maxsize=-1)
         self.log_queue = queue.Queue(maxsize=-1)
         self.hash = {}
         self.nodeId = self.setNodeId()
+        self.config = configparser.ConfigParser()
+        self.config.read('.config')
+        self.countLog = int(self.config["DEFAULT"]["LAST_SNAP"])
+        self.timer = None
+        self.timeOfSnaps = 10
+
 
 
     def setNodeId(self):
@@ -83,13 +89,22 @@ class Server:
         return nodeId
 
     def reload_hash(self):
+
         try:
-            with open('logfile', 'r') as file:
-                i = 0
-                for line in file: #lê o arquivo linha por linha
-                    print (i + "\n")
-                    i += 1
-                    line.replace('\n','')
+            with open('snap.' + str(self.countLog), 'r') as file:
+                for line in file:  # lê o arquivo linha por linha
+                    line_stream = line.split(" ")
+                    key = int(line_stream[0])
+                    data = str(" ".join(line_stream[1:]))
+                    data = data.replace('\n', '')
+                    self.hash[key] = data
+        except:
+            pass
+
+        try:
+            with open('logfile.' + str(self.countLog), 'r') as file:
+                for line in file: #lê o arquivo linha por linhaq
+                    line = line.replace('\n','')
                     self.process_command(reload=True, data=line)
         except:
             pass
@@ -162,15 +177,20 @@ class Server:
                     break
 
     def log_command(self):
-        logfile = open('logfile', 'a')
+
         while not self.event.is_set():
             if not self.log_queue.empty():
-                _, data = self.log_queue.get() #data é o que recebeu do usuário, basicamente o comando
+                _, data = self.log_queue.get()  # data é o que recebeu do usuário, basicamente o comando
                 if data.split()[0] != "READ":
+                    if os.path.isfile(('logfile.' + str(self.countLog - 3))):
+                        os.remove('logfile.' + str(self.countLog - 3))
+                    try:
+                        logfile = open('logfile.' + str(self.countLog), 'a')
+                    except:
+                        logfile = open('logfile.' + str(self.countLog), 'w')
                     logfile.write(data + '\n')
                     logfile.flush()
-
-        logfile.close()
+                    logfile.close()
 
     def program_loop(self):
         print("Servidor " + str(self.nodeId) + " pronto para receber conexões!")
@@ -185,9 +205,8 @@ class Server:
                 print("Shutting down...")
                 time.sleep(5)
                 self.s.close()
+                self.timer.stop()
                 break
-
-
 
     def run(self):
         self.reload_hash() #se tiver alguma coisa no arquivo de log ele reexecuta
@@ -203,14 +222,34 @@ class Server:
         log_thread = threading.Thread(target=self.log_command)
         log_thread.setDaemon(True)
         log_thread.start()
-
+        self.start_snap_thread()
         self.program_loop()
+
+    def modify_log(self):
+
+        if os.path.isfile(('logfile.' + str(self.countLog))):
+            self.countLog += 1
+            with open('snap.' + str(self.countLog), 'w') as f:
+                f.writelines([str(i)+' ' + self.hash[i]+'\n' for i in list(self.hash.keys())])
+                f.flush()
+
+            if os.path.isfile(('snap.' + str(self.countLog-3))):
+                os.remove('snap.' + str(self.countLog-3))
+            self.config["DEFAULT"]["LAST_SNAP"] = str(self.countLog)
+            with open('.config', 'w') as configfile:
+                self.config.write(configfile)
+        self.start_snap_thread()
+
+    def start_snap_thread(self):
+        self.timer = threading.Timer(self.timeOfSnaps, self.modify_log)
+        self.timer.start()
 
 
 def run_server():
     load_dotenv()
     server = Server()
     server.run()
+
 
 if __name__ == '__main__':
 
