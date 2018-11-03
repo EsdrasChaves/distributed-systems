@@ -8,6 +8,7 @@ import os
 import sys
 from dotenv import load_dotenv
 import configparser
+import math
 
 
 class Server:
@@ -31,63 +32,87 @@ class Server:
         self.timeOfSnaps = 10
 
 
-
-    def setNodeId(self):
-        nBits = int(os.getenv("NBITS"))
+    def findFtSuc(self,n,idsArray):
         nNodes = int(os.getenv("NNODES"))
-        nodeId = (2**nBits - 1)
-        responsibles = int(2**nBits/nNodes)
+        lastId = idsArray[len(idsArray)-1]
+        for i in range(0,nNodes):
+            if n > lastId:
+                n = n - lastId+1 # esse +1 é porque reseta no 0
+            if n <= idsArray[i]:
+                return idsArray[i]
+    
+    def setNodeId(self):
+        idsBreakedfile = "./chord/nodeIdsBreaked"
+        breakedfile = open(idsBreakedfile, 'a')
         
-        try:
-            routes = "./chord/roteamento"
-            routesfile = open(routes, 'a')
-            #fazer a tabela de rotas apenas uma vez
-            if os.stat(routes).st_size == 0:
-                writeArray = []
-                for i in range(0,nNodes):
-                    previousId = nodeId-responsibles+1
-                    if previousId < 0 or (previousId - responsibles) < 0:
-                        previousId = 0
-                    writeRange = str( previousId ) + " " + str( nodeId ) + "\n"
-                    writeArray.append(writeRange)
-                    nodeId = previousId-1
+        # #se o arquivo tem informacao
+        if os.stat(idsBreakedfile).st_size != 0: 
+            with open(idsBreakedfile, 'r') as file:
+                first = True
+                tail = []
+                for line in file:
+                    if not first:
+                        tail.append(line)
+                    else:
+                        nodeId = [int(num) for num in line.split()]
+                        nodeId = nodeId[0]
+                        first =False
 
-                writeArray.reverse()
-            for i in range(0,nNodes):
-                routesfile.write(str(i+1) + " " + writeArray[i])
-                    
+            with open(idsBreakedfile, 'w') as file2:
+                file2.writelines(tail)                    
+            breakedfile.close()
+        else:
+            nBits = int(os.getenv("NBITS"))
+            nNodes = int(os.getenv("NNODES"))
+            currentId = (2**nBits - 1)
+            responsibles = int(2**nBits/nNodes)
             
-            routesfile.close()
+            nodeIdsfile = "./chord/nodeIds"
+            idsfile = open(nodeIdsfile, 'a')
 
-        except:
-            pass
+            #se o arquivo tem informacao
+            if os.stat(nodeIdsfile).st_size != 0:
+                lastId = currentId
+                #precisa buscar o ultimo id inserido
+                nAlloc = 0
+                with open(nodeIdsfile, 'r') as file:
+                    for line in file: #lê o arquivo linha por linha
+                        nAlloc += 1 
+                        lastId = int(line)
+                currentId = int(lastId - responsibles)
+            if(currentId >= 0 and nAlloc < nNodes ):
+                nodeId = currentId
+                idsfile.write(str(nodeId) + "\n")
+                idsfile.close()
+            else: 
+                idsfile.close()
+                nodeId = -1
+                print("Numero de servidores completo")
+                self.event.set()
+                sys.exit()            
 
-
-        nodeId = (2**nBits - 1)
-        
-
-        nodeIdsfile = "./chord/nodeIds"
-        idsfile = open(nodeIdsfile, 'a')
-
-        #se o arquivo tem informacao
-        if os.stat(nodeIdsfile).st_size != 0:
-            lastId = nodeId
-            #precisa buscar o ultimo id inserido
-            with open(nodeIdsfile, 'r') as file:
-                for line in file: #lê o arquivo linha por linha
-                    lastId = int(line)
-            nodeId = int(lastId - responsibles)
-        if(nodeId >= 0 ):
-            idsfile.write(str(nodeId) + "\n")
-            idsfile.close()
-        else: 
-            nodeId = -1
-            print("Numero de servidores completo")
-            self.event.set()
-            sys.exit()            
-
+            currentId = (2**nBits - 1)
+            idsArray = []
+            for i in range(0,nNodes):
+                previousId = currentId-responsibles+1
+                if previousId < 0 or (previousId - responsibles) < 0:
+                    previousId = 0
+                idsArray.append(currentId)
+                currentId = previousId-1
+            idsArray.reverse()
+            ftSize =  math.ceil(math.log(nNodes,2))
+            try:
+                ft = "./chord/finger-table-" + str(nodeId)
+                ftfile = open(ft, 'a')
+                for i in range(1,ftSize):
+                    n = nodeId +  2**(i-1)
+                    line = str(i) + " " + str( self.findFtSuc( n,idsArray ) ) + "\n"
+                    ftfile.write(line)
+            except:
+                pass
+            ftfile.close()
         return nodeId
-
+    
     def reload_hash(self):
 
         try:
@@ -203,6 +228,10 @@ class Server:
             except KeyboardInterrupt:
                 self.event.set()
                 print("Shutting down...")
+                nodeIdsfile = "./chord/nodeIdsBreaked"
+                idsfile = open(nodeIdsfile, 'a')
+                idsfile.write( str(self.nodeId) + '\n' )
+                idsfile.close()
                 time.sleep(5)
                 self.s.close()
                 self.timer.stop()
