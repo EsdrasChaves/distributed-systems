@@ -1,0 +1,17 @@
+https://grpc.io/docs/quickstart/python.html
+
+pip3 install virtualenv
+virtualenv venv
+source venv/bin/activate
+
+pip3 install grpcio
+
+
+Funcionamento geral:
+
+- modificar protos/helloworld.proto acrescentando funcoes
+
+- ir até python/helloworld e executar 
+python3 -m grpc_tools.protoc -I../../protos --python_out=. --grpc_python_out=. ../../protos/helloworld.proto
+
+para compilar as funcoes em python/helloworld/helloworld_pb2

@@ -9,16 +9,20 @@ import sys
 from dotenv import load_dotenv
 import configparser
 import math
+from concurrent import futures
+import grpc
+import helloworld_pb2
+import helloworld_pb2_grpc
 
 
-class Server:
+_ONE_DAY_IN_SECONDS = 60 * 60 * 24
+
+class Server(helloworld_pb2_grpc.GreeterServicer):
     def __init__(self):
         self.host = os.getenv("HOST")
         self.port = int(os.getenv("PORT"))
+        self.host_address = os.getenv("HOST") + ":" + os.getenv("PORT") 
         self.buffer_size = int(os.getenv("BUFFER_SIZE"))
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.bind((self.host, self.port))
-        self.s.listen()
         self.event = threading.Event()
         self.input_queue = queue.Queue(maxsize=-1) #número negativo no maxsize para infinito
         self.process_queue = queue.Queue(maxsize=-1)
@@ -31,6 +35,23 @@ class Server:
         self.timer = None
         self.timeOfSnaps = 10
 
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.bind((self.host, self.port))
+        self.s.listen()
+        # MODIFICAR
+        # INICIAR O SERVIDOR GRPC
+        # self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+        # MODIFICAR - ESSA PARTE VAI NO PROGRAM_LOOP
+        # helloworld_pb2_grpc.add_GreeterServicer_to_server(Server(), self.server)
+        # self.server.add_insecure_port(self.host_address)
+        # self.server.start()
+
+    # MODIFICAR
+    # FUNCAO GRPC
+    # def SayNumber(self, request, context):
+    #     return helloworld_pb2.HelloReply(message='Numero do servidor eh %s!' % request.number)
+
+
 
     def findFtSuc(self,n,idsArray):
         nNodes = int(os.getenv("NNODES"))
@@ -42,10 +63,34 @@ class Server:
                 return idsArray[i]
     
     def setNodeId(self):
+        
+        # VER DEPOIS QUE TERMINAR
+        # # Modificar porta a cada novo servidor aberto
+        # with open(".env", 'r') as fileEnv1:
+        #     tail = []
+        #     for line in fileEnv1:
+        #             strip = [s for s in line.split()]
+        #             if strip[0] != 'PORT':
+        #                 tail.append(line)
+        #             else:
+        #                 port = int(strip[2])
+        #                 if port > 22230:
+        #                     port = 22222
+        #                 else:
+        #                     port += 1
+                        
+        #                 tail.append('PORT = ' + str(port) + "\n")
+
+        #     with open(".env", 'w') as fileEnv2:
+        #             fileEnv2.writelines(tail)                    
+        # fileEnv1.close()
+        # fileEnv2.close()
+        
+        
         idsBreakedfile = "./chord/nodeIdsBreaked"
         breakedfile = open(idsBreakedfile, 'a')
         
-        # #se o arquivo tem informacao
+        # Verificar se algum id de servidor quebrado foi encontrado
         if os.stat(idsBreakedfile).st_size != 0: 
             with open(idsBreakedfile, 'r') as file:
                 first = True
@@ -62,6 +107,7 @@ class Server:
                 file2.writelines(tail)                    
             breakedfile.close()
         else:
+        # Procurar um id
             nBits = int(os.getenv("NBITS"))
             nNodes = int(os.getenv("NNODES"))
             currentId = (2**nBits - 1)
@@ -70,11 +116,10 @@ class Server:
             nodeIdsfile = "./chord/nodeIds"
             idsfile = open(nodeIdsfile, 'a')
 
-            #se o arquivo tem informacao
+            nAlloc = 0
+            #Se o arquvio existe precisa buscar o ultimo id inserido
             if os.stat(nodeIdsfile).st_size != 0:
                 lastId = currentId
-                #precisa buscar o ultimo id inserido
-                nAlloc = 0
                 with open(nodeIdsfile, 'r') as file:
                     for line in file: #lê o arquivo linha por linha
                         nAlloc += 1 
@@ -90,9 +135,11 @@ class Server:
                 print("Numero de servidores completo")
                 self.event.set()
                 sys.exit()            
-
+            
+            # Escrever as finger tables
             currentId = (2**nBits - 1)
             idsArray = []
+            # Computar o id de todos os servidores
             for i in range(0,nNodes):
                 previousId = currentId-responsibles+1
                 if previousId < 0 or (previousId - responsibles) < 0:
@@ -100,6 +147,7 @@ class Server:
                 idsArray.append(currentId)
                 currentId = previousId-1
             idsArray.reverse()
+            # Tamanho recomendado das finger tables = log2(N)
             ftSize =  math.ceil(math.log(nNodes,2))
             try:
                 ft = "./chord/finger-table-" + str(nodeId)
@@ -114,7 +162,6 @@ class Server:
         return nodeId
     
     def reload_hash(self):
-
         try:
             with open('snap.' + str(self.countLog), 'r') as file:
                 for line in file:  # lê o arquivo linha por linha
@@ -128,18 +175,19 @@ class Server:
 
         try:
             with open('logfile.' + str(self.countLog), 'r') as file:
-                for line in file: #lê o arquivo linha por linhaq
+                for line in file: #lê o arquivo linha por linha
                     line = line.replace('\n','')
                     self.process_command(reload=True, data=line)
         except:
             pass
 
     def receive_command(self, c, addr):
+        # MODIFICAR
         print("New connection: ", addr)
         while not self.event.is_set():
             data = c.recv(self.buffer_size).decode()
             if not data: break
-            self.input_queue.put((c, addr, data)) #c -> conexão, addr -> endereço, data -> data
+            self.input_queue.put((c,addr, data)) #c -> conexão, addr -> endereço, data -> data
         c.close()
 
     def enqueue_command(self):
@@ -217,25 +265,30 @@ class Server:
                     logfile.flush()
                     logfile.close()
 
+
     def program_loop(self):
         print("Servidor " + str(self.nodeId) + " pronto para receber conexões!")
+        
         while True:
             try:
+                # MODIFICAR PARA A FUNCAO GRPC
                 c, addr = self.s.accept()
                 t = threading.Thread(target=self.receive_command, args=(c, addr))
                 t.setDaemon(True) #quando o programa encerrar a thread também encerra
                 t.start()
             except KeyboardInterrupt:
-                self.event.set()
-                print("Shutting down...")
-                nodeIdsfile = "./chord/nodeIdsBreaked"
-                idsfile = open(nodeIdsfile, 'a')
-                idsfile.write( str(self.nodeId) + '\n' )
-                idsfile.close()
-                time.sleep(5)
-                self.s.close()
-                self.timer.stop()
-                break
+                    self.event.set()
+                    #MODIFICAR
+                    # self.server.stop(0)
+                    self.s.close()
+                    print("Shutting down...")
+                    nodeIdsfile = "./chord/nodeIdsBreaked"
+                    idsfile = open(nodeIdsfile, 'a')
+                    idsfile.write( str(self.nodeId) + '\n' )
+                    idsfile.close()
+                    time.sleep(5)
+                    self.timer.stop()
+            break
 
     def run(self):
         self.reload_hash() #se tiver alguma coisa no arquivo de log ele reexecuta

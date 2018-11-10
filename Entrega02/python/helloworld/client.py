@@ -4,6 +4,10 @@ import time
 import os
 from dotenv import load_dotenv
 
+import grpc
+import helloworld_pb2
+import helloworld_pb2_grpc
+
 load_dotenv()
 
 
@@ -12,6 +16,7 @@ class Client:
     def __init__(self):  # tipo um construtor
         self.host = os.getenv("HOST")
         self.port = int(os.getenv("PORT"))
+        self.host_address = os.getenv("HOST") + ":" + os.getenv("PORT")
         self.buffer_size = int(os.getenv("BUFFER_SIZE"))
         self.event = threading.Event()  # sincroniza thread, objeto inicia como false
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # cria socket STREAM -> TCP, DGRAM -> UDP
@@ -74,6 +79,14 @@ class Client:
               "To close type 'sair': \n")
 
     def run(self):
+        #MODIFICAR 
+        # AQUI É A CHAMADA DA FUNCAO GRPC DO SERVER PELO CLIENTE
+        # channel = grpc.insecure_channel(self.host_address) 
+        # stub = helloworld_pb2_grpc.GreeterStub(channel)
+        # response = stub.SayNumber(helloworld_pb2.NumberRequest(number='1'))
+        # print("Numero recebido " + response.message)
+
+        
         output_thread = threading.Thread(
             target=self.receive_result)  # o output_thread roda a fnç q recebe as msg do servidor
         output_thread.setDaemon(True)
