@@ -30,7 +30,6 @@ class Server(services_pb2_grpc.ServiceServicer):
         self.host_address = os.getenv("HOST") + ":" + os.getenv("PORT") 
         self.event = threading.Event()
         self.hash = {}
-        self.nodeId = self.setNodeId()
         self.config = configparser.ConfigParser()
         self.config.read('.config')
         self.countLog = int(self.config["DEFAULT"]["LAST_SNAP"])
@@ -101,6 +100,10 @@ class Server(services_pb2_grpc.ServiceServicer):
         # fileEnv1.close()
         # fileEnv2.close()
         
+        nBits = int(os.getenv("NBITS"))
+        nNodes = int(os.getenv("NNODES"))
+        currentId = (2**nBits - 1)
+        responsibles = int(2**nBits/nNodes)
         
         idsBreakedfile = "./chord/nodeIdsBreaked"
         breakedfile = open(idsBreakedfile, 'a')
@@ -123,11 +126,6 @@ class Server(services_pb2_grpc.ServiceServicer):
             breakedfile.close()
         else:
         # Procurar um id
-            nBits = int(os.getenv("NBITS"))
-            nNodes = int(os.getenv("NNODES"))
-            currentId = (2**nBits - 1)
-            responsibles = int(2**nBits/nNodes)
-            
             nodeIdsfile = "./chord/nodeIds"
             idsfile = open(nodeIdsfile, 'a')
 
@@ -163,7 +161,7 @@ class Server(services_pb2_grpc.ServiceServicer):
                 currentId = previousId-1
             idsArray.reverse()
             # Tamanho recomendado das finger tables = log2(N)
-            ftSize =  math.ceil(math.log(nNodes,2))
+            ftSize =  math.ceil(math.log(nNodes,2)) + 1
             try:
                 ft = "./chord/finger-table-" + str(nodeId)
                 ftfile = open(ft, 'a')
@@ -174,6 +172,7 @@ class Server(services_pb2_grpc.ServiceServicer):
             except:
                 pass
             ftfile.close()
+        self.previousNode = nodeId - responsibles
         return nodeId
     
     def reload_hash(self):
@@ -199,10 +198,22 @@ class Server(services_pb2_grpc.ServiceServicer):
     def enqueue_command(self):
         while not self.event.is_set():
             if not input_queue.empty():
-                # analisar se esse servidor é responsável pela chave recebida
                 req = input_queue.get()
-                process_queue.put(req)
-                log_queue.put(req)
+                
+                # analisar se esse servidor é responsável pela chave recebida
+                c,data = req
+                query = data.split()
+                key = int(query[1])
+                
+                # Se é de responsabilidade desse sevidor entao enfilera nele
+                process_queue.put(req) # F2
+                log_queue.put(req)     # F3
+                if key > self.previousNode and key <= self.nodeId:
+                    print("Responsavel pela chave")
+                else:
+                    # enfilerar no chord_queue
+                    chord_queue.put(req) # F4
+               
                 
     def process_command(self, reload=False, data=""): 
         while not self.event.is_set():
@@ -272,11 +283,69 @@ class Server(services_pb2_grpc.ServiceServicer):
                     logfile.close()
 
     def forward_command(self):
-        # chord_queue
+        while not self.event.is_set():
+            if not chord_queue.empty():
+                req = chord_queue.get()
+                c,data = req
+                query = data.split()
+                key = int(query[1])
+                # Faz a leitura da finger table do seu nodeId
+                ft = "./chord/finger-table-" + str(self.nodeId)
+                forwards = []
+                with open(ft, 'r') as file:
+                    for line in file:
+                        routes = line.split()
+                        forwards.append(int(routes[1]))
+                    
+                    print(forwards)
+                    # Procura a entrada na finger table com o 
+                    # primeiro valor maior que a chave
+                    anterior = -1
+                    forward_to = -1
+                    for i in range (0,len(forwards)):
+                        atual = forwards[i]
+                        if key < atual:
+                            # se encontra um primeiro valor maior
+                            # que a chave
+                            print("menor")
+                            if anterior != -1:
+                                # se nao for o primeiro, foward é o anterior
+                                forward_to = anterior
+                            else:
+                                # se for o primeiro, foward é o primeiro 
+                                forward_to = atual
+                            break
+                        anterior = atual
+
+                    # se o foward to nao foi definido, chegou no fim da tabela
+                    # define entao como ultimo valor da tabela
+                    if forward_to == -1:
+                        forward_to = forwards[len(forwards)-1]
+                    print("Forwrad Requisition TO:")
+                    print(forward_to)
+
+                    nodeIdsfile = "./chord/nodeIds"
+                    server_on = False
+                    servers = []
+                    with open(nodeIdsfile, 'r') as file2:
+                        for line in file2:
+                            servers.append(int(line))
+                        print(servers)
+                        server_on = forward_to in servers
+                        #TODO
+                        if server_on:
+                            print("Server is on!")
+                        else:
+                            print("Abort operation")
+                        
+                        
+                        
+                file.close()
+                file2.close()
 
     def run(self):
         self.reload_hash()
-
+        self.nodeId = self.setNodeId()
         enqueue_thread = threading.Thread(target=self.enqueue_command)
         enqueue_thread.setDaemon(True)
         enqueue_thread.start()
