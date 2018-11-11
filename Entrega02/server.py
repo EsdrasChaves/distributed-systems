@@ -9,24 +9,23 @@ import sys
 from dotenv import load_dotenv
 import configparser
 import math
+
+
 from concurrent import futures
 import grpc
-import helloworld_pb2
-import helloworld_pb2_grpc
+import services_pb2
+import services_pb2_grpc
 
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
-class Server(helloworld_pb2_grpc.GreeterServicer):
+input_queue = queue.Queue(maxsize=-1)
+process_queue = queue.Queue(maxsize=-1)
+log_queue = queue.Queue(maxsize=-1)
+class Server(services_pb2_grpc.ServiceServicer):
     def __init__(self):
-        self.host = os.getenv("HOST")
-        self.port = int(os.getenv("PORT"))
         self.host_address = os.getenv("HOST") + ":" + os.getenv("PORT") 
-        self.buffer_size = int(os.getenv("BUFFER_SIZE"))
         self.event = threading.Event()
-        self.input_queue = queue.Queue(maxsize=-1) #número negativo no maxsize para infinito
-        self.process_queue = queue.Queue(maxsize=-1)
-        self.log_queue = queue.Queue(maxsize=-1)
         self.hash = {}
         self.nodeId = self.setNodeId()
         self.config = configparser.ConfigParser()
@@ -35,23 +34,39 @@ class Server(helloworld_pb2_grpc.GreeterServicer):
         self.timer = None
         self.timeOfSnaps = 10
 
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.bind((self.host, self.port))
-        self.s.listen()
-        # MODIFICAR
-        # INICIAR O SERVIDOR GRPC
-        # self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-        # MODIFICAR - ESSA PARTE VAI NO PROGRAM_LOOP
-        # helloworld_pb2_grpc.add_GreeterServicer_to_server(Server(), self.server)
-        # self.server.add_insecure_port(self.host_address)
-        # self.server.start()
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=15))
 
-    # MODIFICAR
-    # FUNCAO GRPC
-    # def SayNumber(self, request, context):
-    #     return helloworld_pb2.HelloReply(message='Numero do servidor eh %s!' % request.number)
+    def create(self, request, context):
+        key = request.id
+        data = request.data
+        req = 'CREATE {} {}'.format(key, data)
+        self.enqueue_request(req)
 
+    def read(self, request, context):
+        key = request.id
+        req = 'READ {}'.format(key)
+        
+        self.enqueue_request(req)
 
+    def update(self, request, context):
+        key = request.id
+        data = request.data
+        req = 'UPDATE {} {}'.format(key, data)
+        
+        self.enqueue_request(req)
+
+    def delete(self, request, contex):
+        key = request.id
+        req = 'DELETE {}'.format(key)
+        
+        self.enqueue_request(req)
+
+    def enqueue_request(self, request):
+        pipe = queue.Queue()
+        input_queue.put((pipe, request))
+        rsp = pipe.get()
+        del pipe
+        return services_pb2.ServerResponse(resposta=rsp)
 
     def findFtSuc(self,n,idsArray):
         nNodes = int(os.getenv("NNODES"))
@@ -181,28 +196,21 @@ class Server(helloworld_pb2_grpc.GreeterServicer):
         except:
             pass
 
-    def receive_command(self, c, addr):
-        # MODIFICAR
-        print("New connection: ", addr)
-        while not self.event.is_set():
-            data = c.recv(self.buffer_size).decode()
-            if not data: break
-            self.input_queue.put((c,addr, data)) #c -> conexão, addr -> endereço, data -> data
-        c.close()
-
     def enqueue_command(self):
         while not self.event.is_set():
-            if not self.input_queue.empty():
+            if not input_queue.empty():
                 # analisar se esse servidor é responsável pela chave recebida
-                c, addr, data = self.input_queue.get()
-                self.process_queue.put((c, data))
-                self.log_queue.put((addr, data))
+                req = input_queue.get()
+                process_queue.put(req)
+                log_queue.put(req)
+    
+    
                 
-    def process_command(self, reload=False, data=""): #tira de fila de processos e vai processar e responder pro cliente
+    def process_command(self, reload=False, data=""): 
         while not self.event.is_set():
-            if not self.process_queue.empty() or reload == True:
+            if not process_queue.empty() or reload == True:
                 if reload == False:
-                    c, data = self.process_queue.get()
+                    c, data = process_queue.get()
                 
                 query = data.split()
                 command = query[0]
@@ -214,36 +222,36 @@ class Server(helloworld_pb2_grpc.GreeterServicer):
                 if command == "CREATE":
                     if key not in list(self.hash.keys()):
                         self.hash[key] = usr_data
-                        response_msg ="Successfully CREATED {} - {}".format(key, usr_data).encode()
+                        response_msg ="Successfully CREATED {} - {}".format(key, usr_data)
                     else:
-                        response_msg ="There is already an entry with the key {}".format(key).encode()
+                        response_msg ="There is already an entry with the key {}".format(key)
                 
                 elif command == "UPDATE":
                     if key in list(self.hash.keys()):
                         self.hash[key] = usr_data
-                        response_msg = "Successfully UPDATED {} - new content: {}".format(key, usr_data).encode()
+                        response_msg = "Successfully UPDATED {} - new content: {}".format(key, usr_data)
                     else:
-                        response_msg = "There is no entry with the key {}".format(key).encode()
+                        response_msg = "There is no entry with the key {}".format(key)
                 
                 elif command == "DELETE":
                     if key in list(self.hash.keys()):
                         self.hash.pop(key, None)
-                        response_msg = "Successfully Removed entry {}".format(key).encode()
+                        response_msg = "Successfully Removed entry {}".format(key)
                     else:
-                        response_msg = "There is no entry with the key {}".format(key).encode()
+                        response_msg = "There is no entry with the key {}".format(key)
 
                 elif command == "READ":
                     if key in list(self.hash.keys()):
-                        response_msg = self.hash[key].encode()
+                        response_msg = self.hash[key]
                     else:
-                        response_msg = "There is no entry with the key {}".format(key).encode()
+                        response_msg = "There is no entry with the key {}".format(key)
 
                 else:
-                    response_msg = "Invalid command".encode()
+                    response_msg = "Invalid command"
 
                 if reload == False:
                     try:
-                        c.send(response_msg)
+                        c.put(response_msg)
                     except:
                         pass
                 else:
@@ -252,8 +260,8 @@ class Server(helloworld_pb2_grpc.GreeterServicer):
     def log_command(self):
 
         while not self.event.is_set():
-            if not self.log_queue.empty():
-                _, data = self.log_queue.get()  # data é o que recebeu do usuário, basicamente o comando
+            if not log_queue.empty():
+                _, data = log_queue.get()  # data é o que recebeu do usuário, basicamente o comando
                 if data.split()[0] != "READ":
                     if os.path.isfile(('logfile.' + str(self.countLog - 3))):
                         os.remove('logfile.' + str(self.countLog - 3))
@@ -265,33 +273,8 @@ class Server(helloworld_pb2_grpc.GreeterServicer):
                     logfile.flush()
                     logfile.close()
 
-
-    def program_loop(self):
-        print("Servidor " + str(self.nodeId) + " pronto para receber conexões!")
-        
-        while True:
-            try:
-                # MODIFICAR PARA A FUNCAO GRPC
-                c, addr = self.s.accept()
-                t = threading.Thread(target=self.receive_command, args=(c, addr))
-                t.setDaemon(True) #quando o programa encerrar a thread também encerra
-                t.start()
-            except KeyboardInterrupt:
-                    self.event.set()
-                    #MODIFICAR
-                    # self.server.stop(0)
-                    self.s.close()
-                    print("Shutting down...")
-                    nodeIdsfile = "./chord/nodeIdsBreaked"
-                    idsfile = open(nodeIdsfile, 'a')
-                    idsfile.write( str(self.nodeId) + '\n' )
-                    idsfile.close()
-                    time.sleep(5)
-                    self.timer.stop()
-            break
-
     def run(self):
-        self.reload_hash() #se tiver alguma coisa no arquivo de log ele reexecuta
+        self.reload_hash()
 
         enqueue_thread = threading.Thread(target=self.enqueue_command)
         enqueue_thread.setDaemon(True)
@@ -304,8 +287,31 @@ class Server(helloworld_pb2_grpc.GreeterServicer):
         log_thread = threading.Thread(target=self.log_command)
         log_thread.setDaemon(True)
         log_thread.start()
+        
+        services_pb2_grpc.add_ServiceServicer_to_server(
+            Server(), self.server
+        )
+
+        print("Servidor " + str(self.nodeId) + " pronto para receber conexões!")
+        self.server.add_insecure_port(self.host_address)
+        self.server.start()
+
         self.start_snap_thread()
-        self.program_loop()
+
+        try:
+            while True:
+                time.sleep(_ONE_DAY_IN_SECONDS)
+        except KeyboardInterrupt:
+                    self.event.set()
+                    #MODIFICAR
+                    self.server.stop(0)
+                    print("Shutting down...")
+                    nodeIdsfile = "./chord/nodeIdsBreaked"
+                    idsfile = open(nodeIdsfile, 'a')
+                    idsfile.write( str(self.nodeId) + '\n' )
+                    idsfile.close()
+                    time.sleep(5)
+                    self.timer.stop()
 
     def modify_log(self):
 
@@ -327,12 +333,7 @@ class Server(helloworld_pb2_grpc.GreeterServicer):
         self.timer.start()
 
 
-def run_server():
+if __name__ == '__main__':
     load_dotenv()
     server = Server()
     server.run()
-
-
-if __name__ == '__main__':
-
-    run_server()

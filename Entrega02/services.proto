@@ -1,0 +1,21 @@
+syntax="proto3";
+
+service Service {
+    rpc create(Data) returns (ServerResponse) {}
+    rpc read(Id)     returns (ServerResponse) {}
+    rpc update(Data) returns (ServerResponse) {}
+    rpc delete(Id)   returns (ServerResponse) {}
+}
+
+message Id {
+    int32 id = 1;
+}
+
+message Data {
+    int32 id = 1;
+    string data = 2;
+}
+
+message ServerResponse {
+    string resposta = 1;
+}
