@@ -31,45 +31,56 @@ class Client:
 
     def send_command(self):
         while not self.event.isSet():  # evento estiver setado
-            Client.print_menu()
-            command = input()
-            query = Client.check_command(command)
-            if command == "sair":
-                self.event.set()  # seta o evento com true
-                break
-            elif  query is not None:  # verifica se é um comando válido
-                if query[0] == 'CREATE':
-                    usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
-                    data = services_pb2.Data(id=int(query[1]), data=usr_data)
-                    result = self.stub.create(data)
-                    print(result.resposta)
-                elif query[0] == 'UPDATE':
-                    usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
-                    data = services_pb2.Data(id=int(query[1]), data=usr_data)
-                    result = self.stub.update(data)
-                    print(result.resposta)
-                elif query[0] == 'READ':
-                    data = services_pb2.Id(id=int(query[1]))
-                    result = self.stub.read(data)
-                    print(result.resposta)
-                elif query[0] == 'DELETE':
-                    data = services_pb2.Id(id=int(query[1]))
-                    result = self.stub.delete(data)
-                    print(result.resposta)
-            else:
-                print("Invalid command...")
+            if not self.lock:
+                Client.print_menu()
+                command = input()
+                query = Client.check_command(command)
+                if command == "sair":
+                    self.event.set()  # seta o evento com true
+                    break
+                elif  query is not None:  # verifica se é um comando válido
+                    if query[0] == 'CREATE':
+                        usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
+                        data = services_pb2.Data(id=int(query[1]), data=usr_data)
+                        result = self.stub.create.future(data)
+                        result.add_done_callback(self.process_response)
+                    elif query[0] == 'UPDATE':
+                        usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
+                        data = services_pb2.Data(id=int(query[1]), data=usr_data)
+                        result = self.stub.update.future(data)
+                        result.add_done_callback(self.process_response)
+                    elif query[0] == 'READ':
+                        data = services_pb2.Id(id=int(query[1]))
+                        result = self.stub.read.future(data)
+                        result.add_done_callback(self.process_response)
+                    elif query[0] == 'DELETE':
+                        data = services_pb2.Id(id=int(query[1]))
+                        result = self.stub.delete.future(data)
+                        result.add_done_callback(self.process_response)
+                    self.lock = True
+                else:
+                    print("Invalid command...")
+                    
+    def process_response(self, call_future):
+        self.lock = False
+        print(call_future.result())
 
     @staticmethod
     def check_command(usr_input):
         query = usr_input.split()
         if len(query) <= 0:
             return None
+        
+        try:
+            val = int(query[1])
+        except ValueError:
+            return None
 
         if query[0] == 'CREATE' or query[0] == 'UPDATE':
-            if len(query) >= 3 and query[1].isdigit():
+            if len(query) >= 3:
                 return query
         elif query[0] == 'DELETE' or query[0] == 'READ':
-            if len(query) == 2 and query[1].isdigit():
+            if len(query) == 2:
                 return query
         return None
 

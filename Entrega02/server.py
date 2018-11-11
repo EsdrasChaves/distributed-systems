@@ -205,11 +205,11 @@ class Server(services_pb2_grpc.ServiceServicer):
                 query = data.split()
                 key = int(query[1])
                 
-                # Se é de responsabilidade desse sevidor entao enfilera nele
-                process_queue.put(req) # F2
-                log_queue.put(req)     # F3
+                
                 if key > self.previousNode and key <= self.nodeId:
-                    print("Responsavel pela chave")
+                    # Se é de responsabilidade desse sevidor entao enfilera nele
+                    process_queue.put(req) # F2
+                    log_queue.put(req)     # F3
                 else:
                     # enfilerar no chord_queue
                     chord_queue.put(req) # F4
@@ -342,6 +342,36 @@ class Server(services_pb2_grpc.ServiceServicer):
                         
                 file.close()
                 file2.close()
+
+    def call_remote_procedure(self, request, host_address):
+        channel = grpc.insecure_channel(host_address)
+        stub = services_pb2_grpc.ServiceStub(channel)
+
+        _connection, rqst = request 
+        query = rqst.split()
+        if query[0] == 'CREATE':
+            rqst = " ".join(map(str, query[2:])) if len(query) > 2 else ""
+            data = services_pb2.Data(id=int(query[1]), data=rqst)
+            result = self.stub.create.future(data)
+            result.add_done_callback(self.get_process_response(_connection))
+        elif query[0] == 'UPDATE':
+            rqst = " ".join(map(str, query[2:])) if len(query) > 2 else ""
+            data = services_pb2.Data(id=int(query[1]), data=rqst)
+            result = self.stub.update.future(data)
+            result.add_done_callback(self.get_process_response(_connection))
+        elif query[0] == 'READ':
+            data = services_pb2.Id(id=int(query[1]))
+            result = self.stub.read.future(data)
+            result.add_done_callback(self.get_process_response(_connection))
+        elif query[0] == 'DELETE':
+            data = services_pb2.Id(id=int(query[1]))
+            result = self.stub.delete.future(data)
+            result.add_done_callback(self.get_process_response(_connection))
+    
+    def get_process_response(self, connection):
+        def process_response(response, connection=connection):
+            connection.put(response.result().resposta)
+        return process_response
 
     def run(self):
         self.reload_hash()
