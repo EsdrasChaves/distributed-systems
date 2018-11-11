@@ -40,26 +40,22 @@ class Server(services_pb2_grpc.ServiceServicer):
         key = request.id
         data = request.data
         req = 'CREATE {} {}'.format(key, data)
-        # self.enqueue_request(req)
         return self.enqueue_request(req)
 
     def read(self, request, context):
         key = request.id
         req = 'READ {}'.format(key)
-        # self.enqueue_request(req)
         return self.enqueue_request(req)
 
     def update(self, request, context):
         key = request.id
         data = request.data
         req = 'UPDATE {} {}'.format(key, data)
-        # self.enqueue_request(req)
         return self.enqueue_request(req)
 
     def delete(self, request, contex):
         key = request.id
         req = 'DELETE {}'.format(key)
-        # self.enqueue_request(req)
         return self.enqueue_request(req)
 
     def enqueue_request(self, request):
@@ -252,7 +248,6 @@ class Server(services_pb2_grpc.ServiceServicer):
 
                 if reload == False:
                     try:
-                        print(response_msg)
                         c.put(response_msg)
                     except:
                         pass
@@ -313,7 +308,7 @@ class Server(services_pb2_grpc.ServiceServicer):
                     idsfile.write( str(self.nodeId) + '\n' )
                     idsfile.close()
                     time.sleep(5)
-                    self.timer.stop()
+                    self.timer.cancel()
 
     def modify_log(self):
 

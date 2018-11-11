@@ -31,51 +31,33 @@ class Client:
 
     def send_command(self):
         while not self.event.isSet():  # evento estiver setado
-            if not self.lock:
-                Client.print_menu()
-                command = input()
-                query = Client.check_command(command)
-                if command == "sair":
-                    self.event.set()  # seta o evento com true
-                    break
-                elif  query is not None:  # verifica se é um comando válido
-                    if query[0] == 'CREATE':
-                        usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
-                        data = services_pb2.Data(id=int(query[1]), data=usr_data)
-                        result = self.stub.create(data)
-                        #print(result.message)
-                        print(result.resposta)
-                    elif query[0] == 'UPDATE':
-                        usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
-                        data = services_pb2.Data(id=int(query[1]), data=usr_data)
-                        #result = self.stub.update.future(data)
-                        result = self.stub.update(data)
-                        #result.add_done_callback(self.receive_result)
-                        print(result.resposta)
-                    elif query[0] == 'READ':
-                        data = services_pb2.Id(id=int(query[1]))
-                        #result = self.stub.read.future(data)
-                        result = self.stub.read(data)
-                        #result.add_done_callback(self.receive_result)
-                        print(result.resposta)
-                    elif query[0] == 'DELETE':
-                        data = services_pb2.Id(id=int(query[1]))
-                        # result = self.stub.delete.future(data)
-                        result = self.stub.delete(data)
-                        # result.add_done_callback(self.receive_result)
-                        print(result.resposta)
-                    self.lock = True
-                else:
-                    print("Invalid command...")
-
-    def receive_result(self, result):
-        try:
-            r = response.result()
-            print(r.resposta)
-                
-            self.lock = False
-        except Exception as e:
-            pass
+            Client.print_menu()
+            command = input()
+            query = Client.check_command(command)
+            if command == "sair":
+                self.event.set()  # seta o evento com true
+                break
+            elif  query is not None:  # verifica se é um comando válido
+                if query[0] == 'CREATE':
+                    usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
+                    data = services_pb2.Data(id=int(query[1]), data=usr_data)
+                    result = self.stub.create(data)
+                    print(result.resposta)
+                elif query[0] == 'UPDATE':
+                    usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
+                    data = services_pb2.Data(id=int(query[1]), data=usr_data)
+                    result = self.stub.update(data)
+                    print(result.resposta)
+                elif query[0] == 'READ':
+                    data = services_pb2.Id(id=int(query[1]))
+                    result = self.stub.read(data)
+                    print(result.resposta)
+                elif query[0] == 'DELETE':
+                    data = services_pb2.Id(id=int(query[1]))
+                    result = self.stub.delete(data)
+                    print(result.resposta)
+            else:
+                print("Invalid command...")
 
     @staticmethod
     def check_command(usr_input):
@@ -93,18 +75,13 @@ class Client:
 
     @staticmethod
     def print_menu():
-        print("To add a new entry type CREATE <number> <message>\n"
+        print("\n\nTo add a new entry type CREATE <number> <message>\n"
               "To read an entry type READ <number>\n"
               "To modify an entry type UPDATE <number> <message>\n"
               "To remove an entry type DELETE <number>\n"
               "To close type 'sair': \n")
 
     def run(self):
-
-        # output_thread = threading.Thread(
-        #     target=self.receive_result)  # o output_thread roda a fnç q recebe as msg do servidor
-        # output_thread.setDaemon(True)
-        # output_thread.start()
 
         input_thread = threading.Thread(
             target=self.send_command)  # o input_thread roda a fnç q envia as msg p/ o servidor
