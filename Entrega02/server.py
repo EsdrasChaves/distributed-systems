@@ -22,6 +22,9 @@ _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 input_queue = queue.Queue(maxsize=-1)
 process_queue = queue.Queue(maxsize=-1)
 log_queue = queue.Queue(maxsize=-1)
+chord_queue = queue.Queue(maxsize=-1)
+
+
 class Server(services_pb2_grpc.ServiceServicer):
     def __init__(self):
         self.host_address = os.getenv("HOST") + ":" + os.getenv("PORT") 
@@ -200,8 +203,6 @@ class Server(services_pb2_grpc.ServiceServicer):
                 req = input_queue.get()
                 process_queue.put(req)
                 log_queue.put(req)
-    
-    
                 
     def process_command(self, reload=False, data=""): 
         while not self.event.is_set():
@@ -270,6 +271,9 @@ class Server(services_pb2_grpc.ServiceServicer):
                     logfile.flush()
                     logfile.close()
 
+    def forward_command(self):
+        # chord_queue
+
     def run(self):
         self.reload_hash()
 
@@ -284,6 +288,10 @@ class Server(services_pb2_grpc.ServiceServicer):
         log_thread = threading.Thread(target=self.log_command)
         log_thread.setDaemon(True)
         log_thread.start()
+
+        forward_thread = threading.Thread(target=self.forward_command)
+        forward_thread.setDaemon(True)
+        forward_thread.start()
         
         services_pb2_grpc.add_ServiceServicer_to_server(
             Server(), self.server
