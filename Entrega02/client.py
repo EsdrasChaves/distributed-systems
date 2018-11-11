@@ -43,20 +43,27 @@ class Client:
                         usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
                         data = services_pb2.Data(id=int(query[1]), data=usr_data)
                         result = self.stub.create(data)
-                        print(result.message)
+                        #print(result.message)
+                        print(result.resposta)
                     elif query[0] == 'UPDATE':
                         usr_data = " ".join(map(str, query[2:])) if len(query) > 2 else ""
                         data = services_pb2.Data(id=int(query[1]), data=usr_data)
-                        result = self.stub.update.future(data)
-                        result.add_done_callback(self.receive_result)
+                        #result = self.stub.update.future(data)
+                        result = self.stub.update(data)
+                        #result.add_done_callback(self.receive_result)
+                        print(result.resposta)
                     elif query[0] == 'READ':
                         data = services_pb2.Id(id=int(query[1]))
-                        result = self.stub.read.future(data)
-                        result.add_done_callback(self.receive_result)
+                        #result = self.stub.read.future(data)
+                        result = self.stub.read(data)
+                        #result.add_done_callback(self.receive_result)
+                        print(result.resposta)
                     elif query[0] == 'DELETE':
                         data = services_pb2.Id(id=int(query[1]))
-                        result = self.stub.delete.future(data)
-                        result.add_done_callback(self.receive_result)
+                        # result = self.stub.delete.future(data)
+                        result = self.stub.delete(data)
+                        # result.add_done_callback(self.receive_result)
+                        print(result.resposta)
                     self.lock = True
                 else:
                     print("Invalid command...")
