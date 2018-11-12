@@ -179,9 +179,9 @@ class Server(services_pb2_grpc.ServiceServicer):
                 ftfile = open(ft, 'a')
                 # for i in range(1,ftSize):
                     # n = nodeId +  2**(i-1)
-                line = "Antecessor " + str(self.previousNode ) + " " + str(self.host_address_next) + "\n" 
+                line = "Antecessor " + str(self.previousNode ) + " " + str(self.host_address_prev) + "\n" 
                 ftfile.write(line)
-                line =  "Sucessor " + str(self.sucessorNode) + " " + str(self.host_address_prev) + "\n" 
+                line =  "Sucessor " + str(self.sucessorNode) + " " + str(self.host_address_next) + "\n" 
                 ftfile.write(line)
             except:
                 pass
@@ -273,6 +273,7 @@ class Server(services_pb2_grpc.ServiceServicer):
 
                 if reload == False:
                     try:
+                        print(response_msg)
                         c.put(response_msg)
                     except:
                         pass
@@ -305,56 +306,17 @@ class Server(services_pb2_grpc.ServiceServicer):
                 # Faz a leitura da finger table do seu nodeId
                 ft = "./chord/finger-table-" + str(self.nodeId)
                 forwards = []
+                forwards_address = []
                 with open(ft, 'r') as file:
                     for line in file:
                         routes = line.split()
                         forwards.append(int(routes[1]))
+                        forwards_address.append(routes[2])
                     
-                    print(forwards)
-                    # Procura a entrada na finger table com o 
-                    # primeiro valor maior que a chave
-                    anterior = -1
-                    forward_to = -1
-                    for i in range (0,len(forwards)):
-                        atual = forwards[i]
-                        if key < atual:
-                            # se encontra um primeiro valor maior
-                            # que a chave
-                            print("menor")
-                            if anterior != -1:
-                                # se nao for o primeiro, foward é o anterior
-                                forward_to = anterior
-                            else:
-                                # se for o primeiro, foward é o primeiro 
-                                forward_to = atual
-                            break
-                        anterior = atual
+                self.call_remote_procedure(req, forwards_address[1])
 
-                    # se o foward to nao foi definido, chegou no fim da tabela
-                    # define entao como ultimo valor da tabela
-                    if forward_to == -1:
-                        forward_to = forwards[len(forwards)-1]
-                    print("Forwrad Requisition TO:")
-                    print(forward_to)
-
-                    nodeIdsfile = "./chord/nodeIds"
-                    server_on = False
-                    servers = []
-                    with open(nodeIdsfile, 'r') as file2:
-                        for line in file2:
-                            servers.append(int(line))
-                        print(servers)
-                        server_on = forward_to in servers
-                        #TODO
-                        if server_on:
-                            print("Server is on!")
-                        else:
-                            print("Abort operation")
-                        
-                        
                         
                 file.close()
-                file2.close()
 
     def call_remote_procedure(self, request, host_address):
         channel = grpc.insecure_channel(host_address)
@@ -365,20 +327,20 @@ class Server(services_pb2_grpc.ServiceServicer):
         if query[0] == 'CREATE':
             rqst = " ".join(map(str, query[2:])) if len(query) > 2 else ""
             data = services_pb2.Data(id=int(query[1]), data=rqst)
-            result = self.stub.create.future(data)
+            result = stub.create.future(data)
             result.add_done_callback(self.get_process_response(_connection))
         elif query[0] == 'UPDATE':
             rqst = " ".join(map(str, query[2:])) if len(query) > 2 else ""
             data = services_pb2.Data(id=int(query[1]), data=rqst)
-            result = self.stub.update.future(data)
+            result = stub.update.future(data)
             result.add_done_callback(self.get_process_response(_connection))
         elif query[0] == 'READ':
             data = services_pb2.Id(id=int(query[1]))
-            result = self.stub.read.future(data)
+            result = stub.read.future(data)
             result.add_done_callback(self.get_process_response(_connection))
         elif query[0] == 'DELETE':
             data = services_pb2.Id(id=int(query[1]))
-            result = self.stub.delete.future(data)
+            result = stub.delete.future(data)
             result.add_done_callback(self.get_process_response(_connection))
     
     def get_process_response(self, connection):
@@ -430,7 +392,7 @@ class Server(services_pb2_grpc.ServiceServicer):
                     # nodeIdsfile = "./chord/nodeIdsBreaked"
                     # idsfile = open(nodeIdsfile, 'a')
                     # idsfile.write( str(self.nodeId) + '\n' )
-                    idsfile.close()
+                    # idsfile.close()
                     time.sleep(5)
                     self.timer.cancel()
 
