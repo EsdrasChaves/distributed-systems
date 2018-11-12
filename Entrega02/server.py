@@ -27,7 +27,9 @@ chord_queue = queue.Queue(maxsize=-1)
 
 class Server(services_pb2_grpc.ServiceServicer):
     def __init__(self):
-        self.host_address = os.getenv("HOST") + ":" + os.getenv("PORT") 
+        self.host_address_prev = "" 
+        self.host_address_next = ""
+        self.host_address = os.getenv("HOST") + ":" + os.getenv("PORT")
         self.event = threading.Event()
         self.hash = {}
         self.config = configparser.ConfigParser()
@@ -77,7 +79,6 @@ class Server(services_pb2_grpc.ServiceServicer):
                 return idsArray[i]
     
     def setNodeId(self):
-        
         # VER DEPOIS QUE TERMINAR
         # # Modificar porta a cada novo servidor aberto
         # with open(".env", 'r') as fileEnv1:
@@ -160,19 +161,31 @@ class Server(services_pb2_grpc.ServiceServicer):
                 idsArray.append(currentId)
                 currentId = previousId-1
             idsArray.reverse()
+            
+            if nodeId == (2**nBits - 1):
+                self.sucessorNode = idsArray[0]
+            else:
+                self.sucessorNode = nodeId + responsibles
+            if nodeId == idsArray[0]:
+                self.previousNode = idsArray[len(idsArray)-1]
+            else:
+                self.previousNode = nodeId - responsibles
+
+
             # Tamanho recomendado das finger tables = log2(N)
-            ftSize =  math.ceil(math.log(nNodes,2)) + 1
+            # ftSize =  math.ceil(math.log(nNodes,2)) + 1
             try:
                 ft = "./chord/finger-table-" + str(nodeId)
                 ftfile = open(ft, 'a')
-                for i in range(1,ftSize):
-                    n = nodeId +  2**(i-1)
-                    line = str(i) + " " + str( self.findFtSuc( n,idsArray ) ) + "\n"
-                    ftfile.write(line)
+                # for i in range(1,ftSize):
+                    # n = nodeId +  2**(i-1)
+                line = "Antecessor " + str(self.previousNode ) + " " + str(self.host_address_next) + "\n" 
+                ftfile.write(line)
+                line =  "Sucessor " + str(self.sucessorNode) + " " + str(self.host_address_prev) + "\n" 
+                ftfile.write(line)
             except:
                 pass
             ftfile.close()
-        self.previousNode = nodeId - responsibles
         return nodeId
     
     def reload_hash(self):
@@ -374,6 +387,10 @@ class Server(services_pb2_grpc.ServiceServicer):
         return process_response
 
     def run(self):
+        if len(sys.argv) > 1: 
+            self.host_address = sys.argv[1] 
+            self.host_address_prev = sys.argv[2] 
+            self.host_address_next = sys.argv[3]
         self.reload_hash()
         self.nodeId = self.setNodeId()
         enqueue_thread = threading.Thread(target=self.enqueue_command)
@@ -410,9 +427,9 @@ class Server(services_pb2_grpc.ServiceServicer):
                     #MODIFICAR
                     self.server.stop(0)
                     print("Shutting down...")
-                    nodeIdsfile = "./chord/nodeIdsBreaked"
-                    idsfile = open(nodeIdsfile, 'a')
-                    idsfile.write( str(self.nodeId) + '\n' )
+                    # nodeIdsfile = "./chord/nodeIdsBreaked"
+                    # idsfile = open(nodeIdsfile, 'a')
+                    # idsfile.write( str(self.nodeId) + '\n' )
                     idsfile.close()
                     time.sleep(5)
                     self.timer.cancel()
