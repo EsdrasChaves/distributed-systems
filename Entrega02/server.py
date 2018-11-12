@@ -34,7 +34,6 @@ class Server(services_pb2_grpc.ServiceServicer):
         self.hash = {}
         self.config = configparser.ConfigParser()
         self.config.read('.config')
-        self.countLog = int(self.config["DEFAULT"]["LAST_SNAP"])
         self.timer = None
         self.timeOfSnaps = 10
 
@@ -189,8 +188,9 @@ class Server(services_pb2_grpc.ServiceServicer):
         return nodeId
     
     def reload_hash(self):
+        self.countLog = int(self.config["DEFAULT"]["LAST_SNAP"+str(self.nodeId)])
         try:
-            with open('snap.' + str(self.countLog), 'r') as file:
+            with open('snap.' + str(self.nodeId) + "." +str(self.countLog), 'r') as file:
                 for line in file:  # lê o arquivo linha por linha
                     line_stream = line.split(" ")
                     key = int(line_stream[0])
@@ -201,7 +201,7 @@ class Server(services_pb2_grpc.ServiceServicer):
             pass
 
         try:
-            with open('logfile.' + str(self.countLog), 'r') as file:
+            with open('logfile.' + str(self.nodeId) + "." + str(self.countLog), 'r') as file:
                 for line in file: #lê o arquivo linha por linha
                     line = line.replace('\n','')
                     self.process_command(reload=True, data=line)
@@ -291,12 +291,12 @@ class Server(services_pb2_grpc.ServiceServicer):
             if not log_queue.empty():
                 _, data = log_queue.get()  # data é o que recebeu do usuário, basicamente o comando
                 if data.split()[0] != "READ":
-                    if os.path.isfile(('logfile.' + str(self.countLog - 3))):
-                        os.remove('logfile.' + str(self.countLog - 3))
+                    if os.path.isfile(('logfile.' + str(self.nodeId) + "." + str(self.countLog - 3))):
+                        os.remove('logfile.' + str(self.nodeId) + "." + str(self.countLog - 3))
                     try:
-                        logfile = open('logfile.' + str(self.countLog), 'a')
+                        logfile = open('logfile.' + str(self.nodeId) + "." + str(self.countLog), 'a')
                     except:
-                        logfile = open('logfile.' + str(self.countLog), 'w')
+                        logfile = open('logfile.' + str(self.nodeId) + "." + str(self.countLog), 'w')
                     logfile.write(data + '\n')
                     logfile.flush()
                     logfile.close()
@@ -319,8 +319,19 @@ class Server(services_pb2_grpc.ServiceServicer):
                         forwards_address.append(routes[2])
                 
 
+                max_id = 2 ** int(os.getenv("NBITS"))
+                middle = ((self.nodeId + max_id/2) % (max_id))
+                if self.nodeId > middle:
+                    if key > self.nodeId or key <= middle:
+                        self.call_remote_procedure(req, forwards_address[1])
+                    else:
+                        self.call_remote_procedure(req, forwards_address[0])
+                else:
+                    if key > self.nodeId and key <= middle:
+                        self.call_remote_procedure(req, forwards_address[1])
+                    else:
+                        self.call_remote_procedure(req, forwards_address[0])
 
-                self.call_remote_procedure(req, forwards_address[1])
 
                         
                 file.close()
@@ -361,8 +372,8 @@ class Server(services_pb2_grpc.ServiceServicer):
             self.host_address = sys.argv[1] 
             self.host_address_prev = sys.argv[2] 
             self.host_address_next = sys.argv[3]
-        self.reload_hash()
         self.nodeId = self.setNodeId()
+        self.reload_hash()
         enqueue_thread = threading.Thread(target=self.enqueue_command)
         enqueue_thread.setDaemon(True)
         enqueue_thread.start()
@@ -406,15 +417,15 @@ class Server(services_pb2_grpc.ServiceServicer):
 
     def modify_log(self):
 
-        if os.path.isfile(('logfile.' + str(self.countLog))):
+        if os.path.isfile(('logfile.' + str(self.nodeId) + "." + str(self.countLog))):
             self.countLog += 1
-            with open('snap.' + str(self.countLog), 'w') as f:
+            with open('snap.' + str(self.nodeId) + "." + str(self.countLog), 'w') as f:
                 f.writelines([str(i)+' ' + self.hash[i]+'\n' for i in list(self.hash.keys())])
                 f.flush()
 
-            if os.path.isfile(('snap.' + str(self.countLog-3))):
-                os.remove('snap.' + str(self.countLog-3))
-            self.config["DEFAULT"]["LAST_SNAP"] = str(self.countLog)
+            if os.path.isfile(('snap.' + str(self.nodeId) + "." + str(self.countLog-3))):
+                os.remove('snap.' + str(self.nodeId) + "." + str(self.countLog-3))
+            self.config["DEFAULT"]["LAST_SNAP" + str(self.nodeId)] = str(self.countLog)
             with open('.config', 'w') as configfile:
                 self.config.write(configfile)
         self.start_snap_thread()
