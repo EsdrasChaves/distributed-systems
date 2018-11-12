@@ -220,18 +220,18 @@ class Server(services_pb2_grpc.ServiceServicer):
                 key = int(query[1])
                 if key < 0 or key >= 2 ** int(os.getenv("NBITS")):
                     c.put("Chave no intervalo invalido!")
-                    break
-
-                inicial = 0
-                if self.previousNode <= self.nodeId:
-                    inicial = self.previousNode
-                if key > inicial and key <= self.nodeId:
-                    # Se é de responsabilidade desse sevidor entao enfilera nele
-                    process_queue.put(req) # F2
-                    log_queue.put(req)     # F3
                 else:
-                    # enfilerar no chord_queue
-                    chord_queue.put(req) # F4
+
+                    inicial = 0
+                    if self.previousNode <= self.nodeId:
+                        inicial = self.previousNode
+                    if key >= inicial and key <= self.nodeId:
+                        # Se é de responsabilidade desse sevidor entao enfilera nele
+                        process_queue.put(req) # F2
+                        log_queue.put(req)     # F3
+                    else:
+                        # enfilerar no chord_queue
+                        chord_queue.put(req) # F4
                
                 
     def process_command(self, reload=False, data=""): 
