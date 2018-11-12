@@ -217,9 +217,14 @@ class Server(services_pb2_grpc.ServiceServicer):
                 c,data = req
                 query = data.split()
                 key = int(query[1])
-                
-                
-                if key > self.previousNode and key <= self.nodeId:
+                if key < 0 or key >= 2 ** int(os.getenv("NBITS")):
+                    c.put("Chave no intervalo invalido!")
+                    break
+
+                inicial = 0
+                if self.previousNode <= self.nodeId:
+                    inicial = self.previousNode
+                if key > inicial and key <= self.nodeId:
                     # Se é de responsabilidade desse sevidor entao enfilera nele
                     process_queue.put(req) # F2
                     log_queue.put(req)     # F3
@@ -312,7 +317,9 @@ class Server(services_pb2_grpc.ServiceServicer):
                         routes = line.split()
                         forwards.append(int(routes[1]))
                         forwards_address.append(routes[2])
-                    
+                
+
+
                 self.call_remote_procedure(req, forwards_address[1])
 
                         
@@ -327,6 +334,7 @@ class Server(services_pb2_grpc.ServiceServicer):
         if query[0] == 'CREATE':
             rqst = " ".join(map(str, query[2:])) if len(query) > 2 else ""
             data = services_pb2.Data(id=int(query[1]), data=rqst)
+            print("Vair criar")
             result = stub.create.future(data)
             result.add_done_callback(self.get_process_response(_connection))
         elif query[0] == 'UPDATE':
