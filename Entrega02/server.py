@@ -140,6 +140,7 @@ class Server(services_pb2_grpc.ServiceServicer):
                 currentId = int(lastId - responsibles)
             if(currentId >= 0 and nAlloc < nNodes ):
                 nodeId = currentId
+                print('Responsavel por {} ate {}\n'.format(currentId - responsibles + 1, currentId))
                 idsfile.write(str(nodeId) + "\n")
                 idsfile.close()
             else: 
